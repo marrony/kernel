@@ -88,9 +88,6 @@ int printf(const char* fmt, ...) {
     return ret;
 }
 
-#define cli() __asm__ __volatile__("cli")
-#define sti() __asm__ __volatile__("sti")
-
 struct gdt_descriptor {
     uint32_t segment_limit_low : 16;
     uint32_t base_low : 16;
@@ -186,6 +183,23 @@ extern void isr29();
 extern void isr30();
 extern void isr31();
 
+extern void irq0();
+extern void irq1();
+extern void irq2();
+extern void irq3();
+extern void irq4();
+extern void irq5();
+extern void irq6();
+extern void irq7();
+extern void irq8();
+extern void irq9();
+extern void irq10();
+extern void irq11();
+extern void irq12();
+extern void irq13();
+extern void irq14();
+extern void irq15();
+
 struct registers_t {
     uint32_t ds;
     uint32_t edi;
@@ -205,8 +219,79 @@ struct registers_t {
     uint32_t ss;
 } __attribute__((packed));
 
+#define MASTER_PIC         0x20
+#define MASTER_PIC_COMMAND MASTER_PIC
+#define MASTER_PIC_DATA    (MASTER_PIC+1)
+
+#define SLAVE_PIC         0xa0
+#define SLAVE_PIC_COMMAND SLAVE_PIC
+#define SLAVE_PIC_DATA    (SLAVE_PIC+1)
+
+#define ICW1_INIT      0x10  // init=1
+#define ICW1_LEVEL     0x08  // level=1, edge=0
+#define ICW1_INTERVAL  0x04  // call address interval 4=1, 8=0
+#define ICW1_SINGLE    0x02  // single=1, cascade=0
+#define ICW1_ICW4      0x01  // need icw4=1, no need icw4=0
+
+#define ICW2(x)          (x) 
+#define ICW3_IRQ(x)      (1 << (x))
+#define ICW3_SLAVE(x)    (x)
+#define ICW4_8086        0x01  // 8086/8088=1, MCS-80/85=0
+#define ICW4_AUTOEOI     0x02
+#define ICW4_BUFF_MASTER 0x0c
+#define ICW4_BUFF_SLAVE  0x08
+#define ICW4_SFNM        0x10  // fully nested=1, not fully nested=0
+
+#define OCW2_EOI 0x20
+
+void end_of_interrupt(int intrno) {
+    if(intrno >= 0x28)
+        outb(SLAVE_PIC_COMMAND, OCW2_EOI);
+
+    outb(MASTER_PIC_COMMAND, OCW2_EOI);
+}
+
+void remap_pic8259() {
+    uint8_t mask0 = inb(MASTER_PIC_DATA);
+    uint8_t mask1 = inb(SLAVE_PIC_DATA);
+
+    outb(MASTER_PIC_COMMAND, ICW1_INIT | ICW1_ICW4);
+    outb(SLAVE_PIC_COMMAND, ICW1_INIT | ICW1_ICW4);
+
+    outb(MASTER_PIC_DATA, ICW2(0x20));
+    outb(SLAVE_PIC_DATA, ICW2(0x28));
+
+    outb(MASTER_PIC_DATA, ICW3_IRQ(2));
+    outb(SLAVE_PIC_DATA, ICW3_SLAVE(2));
+
+    outb(MASTER_PIC_DATA, ICW4_8086);
+    outb(SLAVE_PIC_DATA, ICW4_8086);
+
+    outb(MASTER_PIC_DATA, mask0);
+    outb(SLAVE_PIC_DATA, mask1);
+}
+
+#define IRQ0 32
+
+typedef void (*interrupt_callback_t)(const struct registers_t* regs);
+
+interrupt_callback_t interrupt_callback[256];
+
+void irq_handler(const struct registers_t regs) {
+    int intrno = regs.interrupt_number;
+    
+    end_of_interrupt(intrno);
+
+    interrupt_callback_t handler = interrupt_callback[intrno];
+    if(handler != 0)
+        handler(&regs);
+}
+
 void init_idt_table() {
+    remap_pic8259();
+
     memset(idt_table, 0, sizeof(idt_table));
+    memset(interrupt_callback, 0, sizeof(interrupt_callback));
 
     idt_ptr.limit = sizeof(idt_table) - 1;
     idt_ptr.address = (uint32_t)&idt_table;
@@ -244,10 +329,27 @@ void init_idt_table() {
     set_idt_entry(30, (uint32_t)isr30, 0x08, 0x8e);
     set_idt_entry(31, (uint32_t)isr31, 0x08, 0x8e);
 
+    set_idt_entry(32, (uint32_t)irq0, 0x08, 0x8e);
+    set_idt_entry(33, (uint32_t)irq1, 0x08, 0x8e);
+    set_idt_entry(34, (uint32_t)irq2, 0x08, 0x8e);
+    set_idt_entry(35, (uint32_t)irq3, 0x08, 0x8e);
+    set_idt_entry(36, (uint32_t)irq4, 0x08, 0x8e);
+    set_idt_entry(37, (uint32_t)irq5, 0x08, 0x8e);
+    set_idt_entry(38, (uint32_t)irq6, 0x08, 0x8e);
+    set_idt_entry(39, (uint32_t)irq7, 0x08, 0x8e);
+    set_idt_entry(40, (uint32_t)irq8, 0x08, 0x8e);
+    set_idt_entry(41, (uint32_t)irq9, 0x08, 0x8e);
+    set_idt_entry(42, (uint32_t)irq10, 0x08, 0x8e);
+    set_idt_entry(43, (uint32_t)irq11, 0x08, 0x8e);
+    set_idt_entry(44, (uint32_t)irq12, 0x08, 0x8e);
+    set_idt_entry(45, (uint32_t)irq13, 0x08, 0x8e);
+    set_idt_entry(46, (uint32_t)irq14, 0x08, 0x8e);
+    set_idt_entry(47, (uint32_t)irq15, 0x08, 0x8e);
+    
     load_idt(&idt_ptr);
 }
 
-void interrupt_handler(const struct registers_t regs) {
+void isr_handler(const struct registers_t regs) {
     printf("An interrupt was caught with the following registers:\n");
     printf("ds: %x\n", regs.ds & 0xffff);
     printf("edi: %x\n", regs.edi);
@@ -267,16 +369,41 @@ void interrupt_handler(const struct registers_t regs) {
     printf("ss: %x\n", regs.ss & 0xffff);
 }
 
+void timer_callback(const struct registers_t* regs) {
+    static uint32_t ticks = 0;
+
+    ticks++;
+    printf("\rclock ticks: %d", ticks);
+}
+
+void init_timer(int frequency) {
+    interrupt_callback[IRQ0] = timer_callback;
+
+    uint32_t divisor = 1193180 / frequency;
+
+    outb(0x43, 0x36);
+    outb(0x40, divisor & 0xff);
+    outb(0x40, (divisor >> 8) & 0xff);
+}
+
+#define cli() __asm__ __volatile__("cli")
+#define sti() __asm__ __volatile__("sti")
+#define hlt() __asm__ __volatile__("hlt")
+
 int main() {
+    cli();
     init_gdt_table();
     init_idt_table();
+    sti();
 
     puts("THIS IS MY AWESOME KERNEL\n");
     puts("AUTHOR: MARRONY N. NERIS\n");
     puts("VERSION: 1.0\n\n");
-   
-    cli();
-    __asm__ __volatile__ ("int $0x04");
+
+    init_timer(18);
+
+    while(1)
+        hlt();
 
     return 0;
 }

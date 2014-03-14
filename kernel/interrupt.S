@@ -1,4 +1,5 @@
-.extern interrupt_handler
+.extern isr_handler
+.extern irq_handler
 
 .macro ISR intno
 .globl isr\intno
@@ -83,7 +84,7 @@ isr_common:
     movw %ax, %gs
     movw %ax, %ss
 
-    call interrupt_handler
+    call isr_handler
 
     popl %eax
     movw %ax, %ds
@@ -136,3 +137,59 @@ isr_common:
   +=========+   <- esp
 
 */
+
+.macro IRQ irqno intno
+.globl irq\irqno
+irq\irqno:
+    cli
+    pushl $0x00
+    pushl $\intno
+    jmp irq_common
+.endm
+
+IRQ 0 32
+IRQ 1 33
+IRQ 2 34
+IRQ 3 35
+IRQ 4 36
+IRQ 5 37
+IRQ 6 38
+IRQ 7 39
+IRQ 8 40 
+IRQ 9 41
+IRQ 10 42
+IRQ 11 43
+IRQ 12 44
+IRQ 13 45
+IRQ 14 46
+IRQ 15 47
+
+irq_common:
+    pusha
+
+    movw %ds, %ax
+    pushl %eax
+
+    movw $0x10, %ax
+    movw %ax, %ds
+    movw %ax, %es
+    movw %ax, %fs
+    movw %ax, %gs
+    movw %ax, %ss
+
+    call irq_handler
+
+    popl %eax
+    movw %ax, %ds
+    movw %ax, %es
+    movw %ax, %fs
+    movw %ax, %gs
+    movw %ax, %ss
+
+    popa
+    addl $0x8, %esp
+
+    sti
+    iret
+
+

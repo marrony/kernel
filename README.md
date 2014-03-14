@@ -16,5 +16,6 @@ The kernel do:
 - setup a stack
 - setup a GDT with user/kernel segments
 - setup a IDT with dummy interrupt handlers
-- prints a hello message
-- dispatch a interrupt and print its information
+- install a timer
+- prints a hello message and clock ticks
+
