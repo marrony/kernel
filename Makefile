@@ -6,13 +6,15 @@ else
 PREFIX=
 endif
 
-CC_ASM            = $(PREFIX)gcc 
-LD_ASM            = $(PREFIX)ld
-OBJCOPY           = $(PREFIX)objcopy
-CFLAGS            = -c -Wall -Werror
-TRIM_FLAGS        = -R .pdr -R .comment -R .note -S -O binary
-REDIRECT          = > /dev/null 2>&1
-PIC               =
+AS          = $(PREFIX)gcc 
+LD          = $(PREFIX)ld
+CC          = $(PREFIX)gcc 
+OBJCOPY     = $(PREFIX)objcopy
+CFLAGS      = -c -Wall -Werror
+TRIM_FLAGS  = -R .pdr -R .comment -R .note -S -O binary
+REDIRECT    = > /dev/null 2>&1
+PIC         = #-fno-pic -fno-pie # with these flags is causing int13
+KCFLAGS     = $(PIC) -I./include -std=c99 -c -g -Os -march=i686 -ffreestanding -Wall -Werror 
 
 clean:
 	rm -rf bin/*.o
@@ -22,18 +24,27 @@ clean:
 	rm -rf iso/mnt
 
 compile:
-	$(CC_ASM) $(CFLAGS) $(PIC) boot/boot.S -o bin/boot.o
-	$(CC_ASM) $(CFLAGS) $(PIC) kernel/kernel.S -o bin/kernel.o
-	$(CC_ASM) $(CFLAGS) $(PIC) kernel/interrupt.S -o bin/interrupt.o
-	$(LD_ASM) bin/boot.o -o bin/boot.elf -Tboot/boot.ld
+	$(AS) $(CFLAGS) boot/boot.S -o bin/boot.o
+	$(LD) bin/boot.o -o bin/boot.elf -Tboot/boot.ld
 	$(OBJCOPY) $(TRIM_FLAGS) bin/boot.elf bin/boot.bin
-	$(CC_ASM) $(PIC) -std=c99 -c -g -Os -march=i686 -ffreestanding -Wall -Werror kernel/main.c -o bin/main.o
-	$(CC_ASM) $(PIC) -std=c99 -c -g -Os -march=i686 -ffreestanding -Wall -Werror kernel/vsnprintf.c -o bin/vsnprintf.o
-	$(CC_ASM) $(PIC) -std=c99 -c -g -Os -march=i686 -ffreestanding -Wall -Werror kernel/io.c -o bin/io.o
-	$(LD_ASM) -static -T kernel/kernel.ld -nostdlib --nmagic -o bin/kernel.elf bin/kernel.o bin/interrupt.o bin/main.o bin/vsnprintf.o bin/io.o
-	$(OBJCOPY) -O binary bin/kernel.elf bin/kernel.bin
 	dd if=bin/boot.bin of=iso/boot.img bs=512 count=1 $(REDIRECT)
 	dd if=/dev/zero of=iso/boot.img skip=1 seek=1 bs=512 count=2879 $(REDIRECT)
+	$(AS) $(CFLAGS) $(PIC) kernel/kernel.S -o bin/kernel.o
+	$(AS) $(CFLAGS) $(PIC) kernel/interrupt.S -o bin/interrupt.o
+	$(AS) $(CFLAGS) $(PIC) kernel/i386.S -o bin/i386.o
+	$(CC) $(KCFLAGS) kernel/main.c -o bin/main.o
+	$(CC) $(KCFLAGS) kernel/kprintf.c -o bin/kprintf.o
+	$(CC) $(KCFLAGS) kernel/protect.c -o bin/protect.o
+	$(CC) $(KCFLAGS) kernel/string.c -o bin/string.o
+	$(LD) -static -T kernel/kernel.ld -nostdlib --nmagic -o bin/kernel.elf \
+	bin/kernel.o \
+	bin/interrupt.o \
+	bin/i386.o \
+	bin/main.o \
+	bin/kprintf.o \
+	bin/protect.o \
+	bin/string.o
+	$(OBJCOPY) -O binary bin/kernel.elf bin/kernel.bin
 
 setup:
 	mkdir -p iso/mnt
