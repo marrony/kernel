@@ -77,7 +77,17 @@ void init_gdt() {
         .address = (uint32_t)gdt_table
     };
 
-    load_gdt(&gdt_ptr);
+    __asm__ __volatile__ (
+    "    lgdt %0           \n"
+    "    movw %1, %%ax     \n"
+    "    movw %%ax, %%ds   \n"
+    "    movw %%ax, %%es   \n"
+    "    movw %%ax, %%fs   \n"
+    "    movw %%ax, %%gs   \n"
+    "    movw %%ax, %%ss   \n"
+    "    ljmp %2, $1f      \n"
+    "1:                    \n"
+    : : "gm"(gdt_ptr), "i"(0x10), "i"(0x08));
 }
 
 ///////////////////////////////////////////////////////////////
@@ -256,7 +266,10 @@ void init_idt() {
         .address = (uint32_t)idt_table
     };
 
-    load_idt(&idt_ptr);
+    __asm__ __volatile__ (
+        "lidt %0"
+        : : "gm"(idt_ptr)
+    );
 }
 
 #include "kprintf.h"

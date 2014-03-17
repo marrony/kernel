@@ -43,8 +43,5 @@ static inline uint32_t inl(uint16_t port) {
     return value;
 }
 
-void load_idt(void* ptr);
-void load_gdt(void* ptr);
-
 #endif //ASM_H
 
