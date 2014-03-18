@@ -1,6 +1,6 @@
 #include <stdint.h>
 #include "asm.h"
-#include "protect.h"
+#include "irq.h"
 #include "kprintf.h"
 
 void timer_callback(const struct registers_t* regs) {
@@ -20,8 +20,10 @@ void init_timer(uint32_t frequency) {
     outb(0x40, (divisor >> 8) & 0xff);
 }
 
+extern void init_pic8259();
+
 int kmain() {
-    init_protect();
+    init_pic8259();
 
     kprintf("THIS IS MY AWESOME KERNEL\n");
     kprintf("AUTHOR: MARRONY N. NERIS\n");

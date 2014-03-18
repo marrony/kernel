@@ -1,6 +1,6 @@
 #include <stdint.h>
 #include <string.h>
-#include "protect.h"
+#include "intrs.h"
 #include "asm.h"
 
 //access flags
@@ -43,6 +43,10 @@ struct table_pointer_t {
 } __attribute__((packed));
 
 static struct gdt_descriptor_t gdt_table[5];
+struct table_pointer_t gdt_ptr;
+
+static struct idt_descriptor_t idt_table[256];
+struct table_pointer_t idt_ptr;
 
 static void set_gdt_entry(int index, uint32_t base, uint32_t limit, uint8_t access, uint8_t granularity) {
     gdt_table[index].base_low = base & 0xffff;
@@ -65,137 +69,16 @@ static void data_segment(int index, uint32_t base, uint32_t limit, uint8_t level
     set_gdt_entry(index, base, limit, access, granularity);
 }
 
-void init_gdt() {
+static void init_gdt() {
     set_gdt_entry(0, 0, 0, 0, 0);
     code_segment(1, 0, 0xffffff, 0);
     data_segment(2, 0, 0xffffff, 0);
     code_segment(3, 0, 0xffffff, 3);
     data_segment(4, 0, 0xffffff, 3);
 
-    struct table_pointer_t gdt_ptr = {
-        .limit = sizeof(gdt_table) - 1,
-        .address = (uint32_t)gdt_table
-    };
-
-    __asm__ __volatile__ (
-    "    lgdt %0           \n"
-    "    movw %1, %%ax     \n"
-    "    movw %%ax, %%ds   \n"
-    "    movw %%ax, %%es   \n"
-    "    movw %%ax, %%fs   \n"
-    "    movw %%ax, %%gs   \n"
-    "    movw %%ax, %%ss   \n"
-    "    ljmp %2, $1f      \n"
-    "1:                    \n"
-    : : "gm"(gdt_ptr), "i"(0x10), "i"(0x08));
+    gdt_ptr.limit = sizeof(gdt_table) - 1;
+    gdt_ptr.address = (uint32_t)gdt_table;
 }
-
-///////////////////////////////////////////////////////////////
-
-#define MASTER_PIC         0x20
-#define MASTER_PIC_COMMAND MASTER_PIC
-#define MASTER_PIC_DATA    (MASTER_PIC+1)
-
-#define SLAVE_PIC          0xa0
-#define SLAVE_PIC_COMMAND  SLAVE_PIC
-#define SLAVE_PIC_DATA     (SLAVE_PIC+1)
-
-#define ICW1_INIT          0x10  // init=1
-#define ICW1_LEVEL         0x08  // level=1, edge=0
-#define ICW1_INTERVAL      0x04  // call address interval 4=1, 8=0
-#define ICW1_SINGLE        0x02  // single=1, cascade=0
-#define ICW1_ICW4          0x01  // need icw4=1, no need icw4=0
-
-#define ICW2(x)            (x) 
-#define ICW3_IRQ(x)        (1 << (x))
-#define ICW3_SLAVE(x)      (x)
-#define ICW4_8086          0x01  // 8086/8088=1, MCS-80/85=0
-#define ICW4_AUTOEOI       0x02
-#define ICW4_BUFF_MASTER   0x0c
-#define ICW4_BUFF_SLAVE    0x08
-#define ICW4_SFNM          0x10  // fully nested=1, not fully nested=0
-
-#define OCW2_EOI           0x20
-
-static void end_of_interrupt(int intrno) {
-    if(intrno >= 0x28)
-        outb(SLAVE_PIC_COMMAND, OCW2_EOI);
-
-    outb(MASTER_PIC_COMMAND, OCW2_EOI);
-}
-
-static void remap_pic8259() {
-    uint8_t mask0 = inb(MASTER_PIC_DATA);
-    uint8_t mask1 = inb(SLAVE_PIC_DATA);
-
-    outb(MASTER_PIC_COMMAND, ICW1_INIT | ICW1_ICW4);
-    outb(SLAVE_PIC_COMMAND, ICW1_INIT | ICW1_ICW4);
-
-    outb(MASTER_PIC_DATA, ICW2(0x20));
-    outb(SLAVE_PIC_DATA, ICW2(0x28));
-
-    outb(MASTER_PIC_DATA, ICW3_IRQ(2));
-    outb(SLAVE_PIC_DATA, ICW3_SLAVE(2));
-
-    outb(MASTER_PIC_DATA, ICW4_8086);
-    outb(SLAVE_PIC_DATA, ICW4_8086);
-
-    outb(MASTER_PIC_DATA, mask0);
-    outb(SLAVE_PIC_DATA, mask1);
-}
-
-extern void isr0();
-extern void isr1();
-extern void isr2();
-extern void isr3();
-extern void isr4();
-extern void isr5();
-extern void isr6();
-extern void isr7();
-extern void isr8();
-extern void isr9();
-extern void isr10();
-extern void isr11();
-extern void isr12();
-extern void isr13();
-extern void isr14();
-extern void isr15();
-extern void isr16();
-extern void isr17();
-extern void isr18();
-extern void isr19();
-extern void isr20();
-extern void isr21();
-extern void isr22();
-extern void isr23();
-extern void isr24();
-extern void isr25();
-extern void isr26();
-extern void isr27();
-extern void isr28();
-extern void isr29();
-extern void isr30();
-extern void isr31();
-
-extern void irq0();
-extern void irq1();
-extern void irq2();
-extern void irq3();
-extern void irq4();
-extern void irq5();
-extern void irq6();
-extern void irq7();
-extern void irq8();
-extern void irq9();
-extern void irq10();
-extern void irq11();
-extern void irq12();
-extern void irq13();
-extern void irq14();
-extern void irq15();
-
-static struct idt_descriptor_t idt_table[256];
-static irq_callback_t irq_table[256];
 
 static void set_idt_entry(int index, uint32_t base, uint16_t segment, uint8_t privilege) {
     idt_table[index].offset_low = base & 0xffff;
@@ -205,11 +88,8 @@ static void set_idt_entry(int index, uint32_t base, uint16_t segment, uint8_t pr
     idt_table[index].reserved_zeros = 0;
 }
 
-void init_idt() {
-    remap_pic8259();
-
+static void init_idt() {
     memset(idt_table, 0, sizeof(idt_table));
-    memset(irq_table, 0, sizeof(irq_table));
 
     set_idt_entry(0, (uint32_t)isr0, 0x08, 0x8e);
     set_idt_entry(1, (uint32_t)isr1, 0x08, 0x8e);
@@ -261,57 +141,12 @@ void init_idt() {
     set_idt_entry(46, (uint32_t)irq14, 0x08, 0x8e);
     set_idt_entry(47, (uint32_t)irq15, 0x08, 0x8e);
 
-    struct table_pointer_t idt_ptr = {
-        .limit = sizeof(idt_table) - 1,
-        .address = (uint32_t)idt_table
-    };
-
-    __asm__ __volatile__ (
-        "lidt %0"
-        : : "gm"(idt_ptr)
-    );
+    idt_ptr.limit = sizeof(idt_table) - 1;
+    idt_ptr.address = (uint32_t)idt_table;
 }
 
-#include "kprintf.h"
-
-void isr_handler(const struct registers_t regs) {
-    kprintf("An interrupt was caught with the following registers:\n");
-    kprintf("ds: %x\n", regs.ds & 0xffff);
-    kprintf("edi: %x\n", regs.edi);
-    kprintf("esi: %x\n", regs.esi);
-    kprintf("ebp: %x\n", regs.ebp);
-    kprintf("esp: %x\n", regs.esp);
-    kprintf("ebx: %x\n", regs.ebx);
-    kprintf("edx: %x\n", regs.edx);
-    kprintf("ecx: %x\n", regs.ecx);
-    kprintf("eax: %x\n", regs.eax);
-    kprintf("interrupt_number: %x\n", regs.interrupt_number);
-    kprintf("error_code: %x\n", regs.error_code);
-    kprintf("eip: %x\n", regs.eip);
-    kprintf("cs: %x\n", regs.cs & 0xffff);
-    kprintf("eflags: %x\n", regs.eflags);
-    kprintf("user_esp: %x\n", regs.user_esp);
-    kprintf("ss: %x\n", regs.ss & 0xffff);
-}
-
-void register_irq(int intr, irq_callback_t callback) {
-    irq_table[intr] = callback;
-}
-
-void irq_handler(const struct registers_t regs) {
-    int intrno = regs.interrupt_number;
-    
-    end_of_interrupt(intrno);
-
-    irq_callback_t handler = irq_table[intrno];
-    if(handler != 0)
-        handler(&regs);
-}
-
-void init_protect() {
-    cli();
+void init_desc() {
     init_gdt();
     init_idt();
-    sti();
 }
 

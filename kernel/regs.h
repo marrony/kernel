@@ -22,12 +22,5 @@ struct registers_t {
     uint32_t ss;
 } __attribute__((packed));
 
-typedef void (*irq_callback_t)(const struct registers_t* regs);
-
-#define IRQ0 32
-
-void init_protect();
-void register_irq(int irq, irq_callback_t callback);
-
 #endif //PROTECT_H
 

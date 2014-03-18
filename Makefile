@@ -19,11 +19,13 @@ KCFLAGS     = $(PIC) -I./include -std=c99 -c -g -Os -march=i686 -ffreestanding -
 BOOT_OBJS = bin/boot.o
 
 KERNEL_OBJS = \
-	bin/kernel.o \
+	bin/start.o \
 	bin/interrupt.o \
+	bin/pic8259.o \
+	bin/isr.o \
 	bin/main.o \
 	bin/kprintf.o \
-	bin/protect.o \
+	bin/descriptor.o \
 	bin/string.o
 
 clean:
