@@ -27,17 +27,10 @@
 
 #define OCW2_EOI           0x20
 
-void end_of_interrupt(int intrno) {
-    if(intrno >= 0x28)
-        outb(SLAVE_PIC_COMMAND, OCW2_EOI);
-
-    outb(MASTER_PIC_COMMAND, OCW2_EOI);
-}
-
-static irq_callback_t irq_table[256];
+static interrupt_handler_t interrupt_table[256];
 
 void init_pic8259() {
-    memset(irq_table, 0, sizeof(irq_table));
+    memset(interrupt_table, 0, sizeof(interrupt_table));
 
     uint8_t mask0 = inb(MASTER_PIC_DATA);
     uint8_t mask1 = inb(SLAVE_PIC_DATA);
@@ -58,8 +51,15 @@ void init_pic8259() {
     outb(SLAVE_PIC_DATA, mask1);
 }
 
-void register_irq(int intr, irq_callback_t callback) {
-    irq_table[intr] = callback;
+void register_interrupt_handler(int intr, interrupt_handler_t callback) {
+    interrupt_table[intr] = callback;
+}
+
+static void end_of_interrupt(int intrno) {
+    if(intrno >= 0x28)
+        outb(SLAVE_PIC_COMMAND, OCW2_EOI);
+
+    outb(MASTER_PIC_COMMAND, OCW2_EOI);
 }
 
 void irq_handler(const struct registers_t regs) {
@@ -67,7 +67,15 @@ void irq_handler(const struct registers_t regs) {
     
     end_of_interrupt(intrno);
 
-    irq_callback_t handler = irq_table[intrno];
+    interrupt_handler_t handler = interrupt_table[intrno];
+    if(handler != 0)
+        handler(&regs);
+}
+
+void isr_handler(const struct registers_t regs) {
+    int intrno = regs.interrupt_number;
+    
+    interrupt_handler_t handler = interrupt_table[intrno];
     if(handler != 0)
         handler(&regs);
 }

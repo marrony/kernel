@@ -7,7 +7,7 @@
 
 .globl start
 start:
-    movl $(stack + STACK_SIZE), %esp
+    movl $(__stack + STACK_SIZE), %esp
 
     call init_desc
     lidt idt_ptr
@@ -30,6 +30,8 @@ loop:
     hlt
     jmp loop
 
-.comm stack, STACK_SIZE 
+.globl __stack
+.align 4096
+.comm __stack, STACK_SIZE 
 
 

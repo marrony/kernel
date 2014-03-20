@@ -1,5 +1,5 @@
-#ifndef PROTECT_H
-#define PROTECT_H
+#ifndef REGS_H 
+#define REGS_H
 
 #include <stdint.h> 
 
@@ -22,5 +22,5 @@ struct registers_t {
     uint32_t ss;
 } __attribute__((packed));
 
-#endif //PROTECT_H
+#endif //REGS_H
 
