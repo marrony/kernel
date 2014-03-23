@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include <string.h>
-
 #include "irq.h"
+#include "heap.h"
 #include "asm.h"
 
 #define PRESENT      (1 << 0)
@@ -14,23 +14,14 @@
 #define PAT          (1 << 7)
 #define GLOBAL       (1 << 8)
 #define AVAILABLE(x) ((x) << 9)
-#define FRAME(x)     ((x) << 12)
-#define BLOCK(x)     ((x) >> 12)
 #define ADDRESS(x)   ((x) & 0xfffff000)
 
-/*typedef struct {
-    uint32_t present  : 1;
-    uint32_t rw       : 1;
-    uint32_t user     : 1;
-    uint32_t pwt      : 1;
-    uint32_t pcd      : 1;
-    uint32_t accessed : 1;
-    uint32_t dirty    : 1;
-    uint32_t pat      : 1;
-    uint32_t global   : 1;
-    uint32_t ignored  : 3;
-    uint32_t block    : 20;
-} page_table_entry_t, page_directory_entry_t;*/
+#define IS_PROTECTION(x)  ((x) & (1 << 0))
+#define IS_NONPRESENT(x)  (!IS_PROTECTION(x))
+#define IS_WRITE(x)       ((x) & (1 << 1))
+#define IS_USER(x)        ((x) & (1 << 2))
+#define IS_RESERVED(x)    ((x) & (1 << 3))
+#define IS_INSTRUCTION(x) ((x) & (1 << 4))
 
 typedef struct page_table_t {
     uint32_t pages[1024];
@@ -50,90 +41,19 @@ extern char __bss_start;
 extern char __bss_end;
 extern char __stack;
 
-static uint32_t current_memory = (uint32_t) &__kernel_end;
-
-void* kamalloc(size_t size, size_t align) {
-    uint32_t ptr = current_memory;
-    if(align != 0)
-        ptr = (ptr + align - 1) & ~(align - 1);
-    current_memory = ptr + size;
-    return (void*)ptr;
-}
-
-void* kmalloc(size_t size) {
-    return kamalloc(size, 0);
-}
-
 #define BLOCK_SIZE       4096
-#define BLOCK_INDEX(x)   ((x) / 32)
-#define BLOCK_OFFSET(x)  ((x) % 32)
-
-uint32_t mm_max_blocks;
-uint32_t* mm_block_map; 
-
-void mm_block_set(uint32_t block) {
-    mm_block_map[BLOCK_INDEX(block)] |= (1 << BLOCK_OFFSET(block));
-}
-
-void mm_block_unset(uint32_t block) {
-    mm_block_map[BLOCK_INDEX(block)] &= ~(1 << BLOCK_OFFSET(block));
-}
-
-int mm_block_isset(uint32_t block) {
-    return mm_block_map[BLOCK_INDEX(block)] & (1 << BLOCK_OFFSET(block));
-}
-
-uint32_t mm_get_first_free() {
-    for(uint32_t i = 0; i < BLOCK_INDEX(mm_max_blocks); i++) {
-        uint32_t bits = mm_block_map[i];
-
-        if(bits == 0xffffffff)
-            continue;
-
-        for(int j = 0; j < 32; j++) {
-            int bit = 1 << j;
-
-            if(!(bits & bit))
-                return i*32 + j;
-        }
-    }
-
-    return 0xffffffff;
-}
-
-void mm_mark_blocks(uint32_t ptr, size_t nblocks) {
-    ptr /= BLOCK_SIZE;
-
-    for(size_t i = 0; i < nblocks; i++)
-        mm_block_set(ptr++);
-}
-
-void mm_mark_used_blocks(uint32_t start, uint32_t end) {
-    for(uint32_t i = start; i < end; i += BLOCK_SIZE)
-        mm_block_set(i / BLOCK_SIZE);
-}
-
-uint32_t mm_get_block() {
-    uint32_t free = mm_get_first_free();
-
-    if(free == 0xffffffff)
-        return 0;
-
-    mm_block_set(free);
-
-    return free;
-}
 
 void mm_alloc_page(uint32_t* page_table_entry) {
     if(ADDRESS(*page_table_entry) != 0)
         return;
 
-    uint32_t block = mm_get_block();
-    *page_table_entry |= PRESENT | READ | USER | FRAME(block);
+    uint32_t page = (uint32_t)kamalloc(BLOCK_SIZE, 4096);
+    *page_table_entry |= PRESENT | READ | USER | page;
 }
 
 void mm_free_page(uint32_t* page_table_entry) {
-    mm_block_unset(BLOCK(*page_table_entry));
+    uint32_t page = ADDRESS(*page_table_entry);
+    kfree((void*)page);
     *page_table_entry = 0;
 }
 
@@ -143,15 +63,15 @@ uint32_t* mm_get_page_entry(page_directory_t* directory, uint32_t address, int c
 
     if(ADDRESS(directory->tables[table_index]) != 0) {
         page_table_t* page_table = (page_table_t*)ADDRESS(directory->tables[table_index]);
+
         return &page_table->pages[page_index];
     }
 
     if(create_page) {
-        uint32_t page_block = mm_get_block();
-        page_table_t* page_table = (page_table_t*)FRAME(page_block);
+        page_table_t* page_table = (page_table_t*)kamalloc(sizeof(page_table_t), 4096);
 
         memset(page_table, 0, sizeof(page_table_t));
-        directory->tables[table_index] = PRESENT | READ | USER | FRAME(page_block);
+        directory->tables[table_index] = PRESENT | READ | USER | (uint32_t)page_table; 
 
         return &page_table->pages[page_index];
     }
@@ -207,16 +127,35 @@ void page_fault_handler(const struct registers_t* regs) {
 
     kprintf("A page fault was caught at address 0x%x\n", address);
 
+    if(IS_PROTECTION(regs->error_code))
+        kprintf("The fault was caused by a page-level protection violation\n");
+    else
+        kprintf("The fault was caused by a non-present page\n");
+
+    if(IS_WRITE(regs->error_code))
+        kprintf("The access causing the fault was a write\n");
+    else
+        kprintf("The access causing the fault was a read\n");
+
+    if(IS_USER(regs->error_code))
+        kprintf("A user-mode access caused the fault\n");
+    else
+        kprintf("A kernel-mode access caused the fault\n");
+
+    if(IS_RESERVED(regs->error_code))
+        kprintf("The fault was caused by a reserved bit set to 1 in some paging-structure entry\n");
+
+    if(IS_INSTRUCTION(regs->error_code))
+        kprintf("The fault was caused by an instruction fetch\n");
+
     while(1)
         hlt();
 }
 
 void init_paging(uint32_t max_memory) {
-    mm_mark_used_blocks(0, current_memory);
+    init_kernel_heap(max_memory);
 
-    mm_max_blocks = max_memory / BLOCK_SIZE;
-    mm_block_map = (uint32_t*)FRAME(mm_get_block());
-    kernel_directory = (page_directory_t*)mm_get_block();
+    kernel_directory = (page_directory_t*)kamalloc(sizeof(page_directory_t), 4096);
     memset(kernel_directory, 0, sizeof(page_directory_t));
 
     for(uint32_t ptr = 0; ptr < max_memory; ptr += BLOCK_SIZE) {

@@ -13,7 +13,7 @@ OBJCOPY     = $(PREFIX)objcopy
 CFLAGS      = -c -Wall -Werror
 TRIM_FLAGS  = -R .pdr -R .comment -R .note -S -O binary
 REDIRECT    = > /dev/null 2>&1
-PIC         = -fno-pic -fno-pie # with these flags is causing int13
+PIC         = -fno-pic -fno-pie
 KCFLAGS     = $(PIC) -I./include -std=c99 -c -g -Os -march=i686 -ffreestanding -Wall -Werror 
 
 BOOT_OBJS = bin/boot.o
@@ -23,6 +23,7 @@ KERNEL_OBJS = \
 	bin/interrupt.o \
 	bin/pic8259.o \
 	bin/paging.o \
+	bin/heap.o \
 	bin/main.o \
 	bin/kprintf.o \
 	bin/descriptor.o \

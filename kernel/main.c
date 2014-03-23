@@ -52,8 +52,8 @@ int kmain() {
     kprintf("AUTHOR: MARRONY N. NERIS\n");
     kprintf("VERSION: 1.0\n\n");
 
-    register_interrupt_handler(30, &int30);
-    __asm__ __volatile__ ("int $30");
+    //register_interrupt_handler(30, &int30);
+    //__asm__ __volatile__ ("int $30");
 
     init_timer(19);
 
