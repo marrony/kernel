@@ -1,3 +1,5 @@
+#include "paging.h"
+
 #include <stdint.h>
 #include <string.h>
 #include "irq.h"
@@ -23,14 +25,6 @@
 #define IS_RESERVED(x)    ((x) & (1 << 3))
 #define IS_INSTRUCTION(x) ((x) & (1 << 4))
 
-typedef struct page_table_t {
-    uint32_t pages[1024];
-} page_table_t;
-
-typedef struct page_directory_t {
-    uint32_t tables[1024];
-} page_directory_t;
-
 extern char __kernel_start;
 extern char __kernel_end;
 extern char __text_start;
@@ -41,13 +35,11 @@ extern char __bss_start;
 extern char __bss_end;
 extern char __stack;
 
-#define BLOCK_SIZE       4096
-
 void mm_alloc_page(uint32_t* page_table_entry) {
     if(ADDRESS(*page_table_entry) != 0)
         return;
 
-    uint32_t page = (uint32_t)kamalloc(BLOCK_SIZE, 4096);
+    uint32_t page = (uint32_t)kamalloc(PAGE_SIZE, 4096);
     *page_table_entry |= PRESENT | READ | USER | page;
 }
 
@@ -90,12 +82,66 @@ int mm_remap(page_directory_t* directory, uint32_t physical, uint32_t virtual) {
     return 1;
 }
 
-void mm_switch_page_directory(page_directory_t* directory) {
-    __asm__ __volatile__ ("movl %0, %%cr3" : : "r"(directory));
+page_directory_t* kernel_directory;
+page_directory_t* current_directory;
 
+static void mm_enable_paging() {
     uint32_t cr0;
     __asm__ __volatile__ ("movl %%cr0, %0" : "=r"(cr0));
     __asm__ __volatile__ ("movl %0, %%cr0" : : "r"(cr0 | 0x80000000));
+}
+
+static void mm_disable_paging() {
+    uint32_t cr0;
+    __asm__ __volatile__ ("movl %%cr0, %0" : "=r"(cr0));
+    __asm__ __volatile__ ("movl %0, %%cr0" : : "r"(cr0 & 0x7fffffff));
+}
+
+void mm_switch_page_directory(page_directory_t* directory) {
+    __asm__ __volatile__ ("movl %0, %%cr3" : : "r"(directory));
+    current_directory = directory;
+
+    mm_enable_paging();
+}
+
+page_table_t* mm_clone_page_table(const page_table_t* page) {
+    page_table_t* new_page = (page_table_t*)kamalloc(sizeof(page_table_t), 4096);
+    memset(new_page, 0, sizeof(page_table_t)); 
+
+    for(int i = 0; i < 1024; i++) {
+        if(!ADDRESS(page->pages[i]))
+            continue;
+
+        mm_alloc_page(&new_page->pages[i]);
+        new_page->pages[i] |= (page->pages[i] & 0xfff);
+
+        cli();
+        mm_disable_paging();
+        memcpy((void*)ADDRESS(new_page->pages[i]), (void*)ADDRESS(page->pages[i]), PAGE_SIZE);
+        mm_enable_paging();
+        sti();
+    }
+
+    return new_page;
+}
+
+page_directory_t* mm_clone_page_directory(const page_directory_t* directory) {
+    page_directory_t* new_directory = kamalloc(sizeof(page_directory_t), 4096);
+    memset(new_directory, 0, sizeof(page_directory_t));
+
+    for(int i = 0; i < 1024; i++) {
+        if(!directory->tables[i])
+            continue;
+
+        if(ADDRESS(kernel_directory->tables[i]) == ADDRESS(directory->tables[i])) {
+            new_directory->tables[i] = directory->tables[i];
+        } else {
+            page_table_t* page_table = mm_clone_page_table((page_table_t*)ADDRESS(directory->tables[i]));
+            new_directory->tables[i] = PRESENT | USER | READ | (uint32_t)page_table; 
+        }
+    }
+
+    return new_directory;
 }
 
 uint32_t mm_get_mapping(page_directory_t* directory, uint32_t address) {
@@ -116,11 +162,9 @@ uint32_t mm_get_mapping(page_directory_t* directory, uint32_t address) {
     return ADDRESS(page_entry) | frame_index;
 }
 
-page_directory_t* kernel_directory;
-
 #include "kprintf.h"
 
-void page_fault_handler(const struct registers_t* regs) {
+void mm_page_fault_handler(registers_t* regs) {
     uint32_t address;
 
     __asm__ __volatile__ ("movl %%cr2, %0" : "=r"(address));
@@ -158,11 +202,11 @@ void init_paging(uint32_t max_memory) {
     kernel_directory = (page_directory_t*)kamalloc(sizeof(page_directory_t), 4096);
     memset(kernel_directory, 0, sizeof(page_directory_t));
 
-    for(uint32_t ptr = 0; ptr < max_memory; ptr += BLOCK_SIZE) {
+    for(uint32_t ptr = 0; ptr < max_memory; ptr += PAGE_SIZE) {
         mm_remap(kernel_directory, ptr, ptr);
     }
 
-    register_interrupt_handler(14, &page_fault_handler);
+    register_interrupt_handler(14, &mm_page_fault_handler);
     mm_switch_page_directory(kernel_directory);
 }
 

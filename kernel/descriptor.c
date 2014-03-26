@@ -9,8 +9,9 @@
 #define WRITE       (1 << 1)
 #define EXPANSION   (1 << 2)
 #define CONFORMING  (1 << 2)
-#define CODE        (3 << 3)
-#define DATA        (2 << 3)
+#define EXECUTABLE  (1 << 3)
+#define CODE        ((1 << 4) | EXECUTABLE)
+#define DATA        (1 << 4)
 #define DPL(x)      ((x) << 5)
 #define PRESENT     (1 << 7)
 
@@ -20,33 +21,66 @@
 #define BIG         (1 << 6)
 #define GRANULAR    (1 << 7)
 
-struct gdt_descriptor_t {
+typedef struct gdt_descriptor_t {
     uint16_t limit_low;
     uint16_t base_low;
     uint8_t  base_middle;
     uint8_t  access;
     uint8_t  granularity;
     uint8_t  base_high;
-} __attribute__((packed));
+} __attribute__((packed)) gdt_descriptor_t;
 
-struct idt_descriptor_t {
+typedef struct idt_descriptor_t {
     uint16_t offset_low;
     uint16_t segment;
     uint8_t  reserved_zeros;
     uint8_t  privilege;
     uint16_t offset_high;
-} __attribute__((packed));
+} __attribute__((packed)) idt_descriptor_t;
 
-struct table_pointer_t {
+typedef struct tss_descriptor_t {
+    uint32_t previous_task;
+    uint32_t esp0;
+    uint32_t ss0;
+    uint32_t esp1;
+    uint32_t ss1;
+    uint32_t esp2;
+    uint32_t ss2;
+    uint32_t cr3;
+    uint32_t eip;
+    uint32_t eflags;
+    uint32_t eax;
+    uint32_t ecx;
+    uint32_t edx;
+    uint32_t ebx;
+    uint32_t esp;
+    uint32_t ebp;
+    uint32_t esi;
+    uint32_t edi;
+    uint32_t es;
+    uint32_t cs;
+    uint32_t ss;
+    uint32_t ds;
+    uint32_t fs;
+    uint32_t gs;
+    uint32_t ldt;
+    uint16_t trap;
+    uint16_t iomap;
+} __attribute__((packed)) tss_descriptor_t;
+
+typedef struct table_pointer_t {
     uint16_t limit;
     uint32_t address;
-} __attribute__((packed));
+} __attribute__((packed)) table_pointer_t;
 
-static struct gdt_descriptor_t gdt_table[5];
-struct table_pointer_t gdt_ptr;
+static gdt_descriptor_t gdt_table[6];
+table_pointer_t gdt_ptr;
 
-static struct idt_descriptor_t idt_table[256];
-struct table_pointer_t idt_ptr;
+static idt_descriptor_t idt_table[256];
+table_pointer_t idt_ptr;
+
+static tss_descriptor_t tss_entry;
+uint16_t tss_ptr;
 
 static void set_gdt_entry(int index, uint32_t base, uint32_t limit, uint8_t access, uint8_t granularity) {
     gdt_table[index].base_low = base & 0xffff;
@@ -58,14 +92,20 @@ static void set_gdt_entry(int index, uint32_t base, uint32_t limit, uint8_t acce
 }
 
 static void code_segment(int index, uint32_t base, uint32_t limit, uint8_t level) {
-    uint8_t access = CODE | READ | PRESENT |  DPL(level);
+    uint8_t access = CODE | READ | PRESENT | DPL(level);
     uint8_t granularity = DEFAULT | GRANULAR;
     set_gdt_entry(index, base, limit, access, granularity);
 }
 
 static void data_segment(int index, uint32_t base, uint32_t limit, uint8_t level) {
-    uint8_t access = DATA | WRITE | PRESENT |  DPL(level);
+    uint8_t access = DATA | WRITE | PRESENT | DPL(level);
     uint8_t granularity = DEFAULT | GRANULAR;
+    set_gdt_entry(index, base, limit, access, granularity);
+}
+
+static void tss_segment(int index, uint32_t base, uint32_t limit, uint32_t level) {
+    uint8_t access = ACCESSED | PRESENT | EXECUTABLE | DPL(level);
+    uint8_t granularity = BIG;
     set_gdt_entry(index, base, limit, access, granularity);
 }
 
@@ -124,6 +164,8 @@ static void init_idt() {
     set_idt_entry(30, (uint32_t)isr30, 0x08, 0x8e);
     set_idt_entry(31, (uint32_t)isr31, 0x08, 0x8e);
 
+    set_idt_entry(128, (uint32_t)isr128, 0x08, 0x8e);
+
     set_idt_entry(32, (uint32_t)irq0, 0x08, 0x8e);
     set_idt_entry(33, (uint32_t)irq1, 0x08, 0x8e);
     set_idt_entry(34, (uint32_t)irq2, 0x08, 0x8e);
@@ -145,8 +187,29 @@ static void init_idt() {
     idt_ptr.address = (uint32_t)idt_table;
 }
 
-void init_desc() {
+void init_tss() {
+    tss_ptr = 0x28 | 0x3;
+
+    uint32_t base = (uint32_t)&tss_entry;
+    tss_segment(5, base, base+sizeof(tss_descriptor_t), 0);
+
+    memset(&tss_entry, 0, sizeof(tss_descriptor_t));
+
+    tss_entry.ss0 = 0x10;
+    tss_entry.esp0 = 0;
+
+    //set last 2 bits because this tss is for switch task from level 3 to level 0
+    tss_entry.cs = 0x8 | 0x3;
+    tss_entry.ss =
+    tss_entry.es =
+    tss_entry.ds =
+    tss_entry.fs =
+    tss_entry.gs = 0x10 | 0x3;
+}
+
+void init_descriptor() {
     init_gdt();
     init_idt();
+    init_tss();
 }
 

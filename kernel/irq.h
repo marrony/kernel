@@ -3,7 +3,7 @@
 
 #include "regs.h"
 
-typedef void (*interrupt_handler_t)(const struct registers_t* regs);
+typedef void (*interrupt_handler_t)(registers_t* regs);
 
 #define IRQ0 32
 

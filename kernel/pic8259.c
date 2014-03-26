@@ -62,21 +62,21 @@ static void end_of_interrupt(int intrno) {
     outb(MASTER_PIC_COMMAND, OCW2_EOI);
 }
 
-void irq_handler(const struct registers_t regs) {
-    int intrno = regs.interrupt_number;
+void irq_handler(registers_t* regs) {
+    int intrno = regs->interrupt_number;
     
     end_of_interrupt(intrno);
 
     interrupt_handler_t handler = interrupt_table[intrno];
     if(handler != 0)
-        handler(&regs);
+        handler(regs);
 }
 
-void isr_handler(const struct registers_t regs) {
-    int intrno = regs.interrupt_number;
+void isr_handler(registers_t* regs) {
+    int intrno = regs->interrupt_number;
     
     interrupt_handler_t handler = interrupt_table[intrno];
     if(handler != 0)
-        handler(&regs);
+        handler(regs);
 }
 

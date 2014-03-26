@@ -52,6 +52,8 @@ ISR 29
 ISR 30
 ISR 31
 
+ISR 128 
+
 /*
   Stack content at this moment
 
@@ -84,7 +86,9 @@ isr_common:
     movw %ax, %gs
     movw %ax, %ss
 
+    pushl %esp
     call isr_handler
+    addl $4, %esp
 
     popl %eax
     movw %ax, %ds
@@ -177,8 +181,12 @@ irq_common:
     movw %ax, %gs
     movw %ax, %ss
 
+    pushl %esp
     call irq_handler
+    addl $4, %esp
 
+.globl irq_end
+irq_end:
     popl %eax
     movw %ax, %ds
     movw %ax, %es
@@ -191,5 +199,4 @@ irq_common:
 
     sti
     iret
-
 

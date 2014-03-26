@@ -1,7 +1,8 @@
 .extern kmain
-.extern init_desc
+.extern init_descriptor
 .extern idt_ptr
 .extern gdt_ptr
+.extern tss_ptr
 
 #define STACK_SIZE 0x8000
 
@@ -9,9 +10,10 @@
 start:
     movl $(__stack + STACK_SIZE), %esp
 
-    call init_desc
+    call init_descriptor
     lidt idt_ptr
     lgdt gdt_ptr
+    ltr tss_ptr
 
     ljmp $0x08, $1f
 1:  movw $0x10, %ax

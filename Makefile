@@ -24,6 +24,7 @@ KERNEL_OBJS = \
 	bin/pic8259.o \
 	bin/paging.o \
 	bin/heap.o \
+	bin/task.o \
 	bin/main.o \
 	bin/kprintf.o \
 	bin/descriptor.o \

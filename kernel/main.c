@@ -2,24 +2,8 @@
 #include "asm.h"
 #include "irq.h"
 #include "regs.h"
+#include "task.h"
 #include "kprintf.h"
-
-void timer_callback(const struct registers_t* regs) {
-    static uint32_t ticks = 0;
-
-    ticks++;
-    kprintf("\rclock ticks: %u", ticks);
-}
-
-void init_timer(uint32_t frequency) {
-    register_interrupt_handler(IRQ0, &timer_callback);
-
-    uint32_t divisor = 1193182 / frequency;
-
-    outb(0x43, 0x36);
-    outb(0x40, divisor & 0xff);
-    outb(0x40, (divisor >> 8) & 0xff);
-}
 
 void int30(const struct registers_t* regs) {
     kprintf("An interrupt was caught with the following registers:\n");
@@ -44,21 +28,36 @@ void int30(const struct registers_t* regs) {
 extern void init_pic8259();
 extern void init_paging(uint32_t max_memory);
 
+int fork() {
+    int ret;
+    __asm__ __volatile__ (
+    "   int $0x80  \n"
+    : "=a"(ret)
+    );
+    return ret;
+}
+
 int kmain() {
     init_pic8259();
     init_paging(32*1024*1024);
+    init_tasking();
 
-    kprintf("THIS IS MY AWESOME KERNEL\n");
-    kprintf("AUTHOR: MARRONY N. NERIS\n");
-    kprintf("VERSION: 1.0\n\n");
-
-    //register_interrupt_handler(30, &int30);
-    //__asm__ __volatile__ ("int $30");
-
-    init_timer(19);
-
-    while(1)
-        hlt();
+    int pid;
+    if(!(pid = fork())) {
+        kprintf("THIS IS MY AWESOME KERNEL\n");
+        kprintf("AUTHOR: MARRONY N. NERIS\n");
+        kprintf("VERSION: 1.0\n\n");
+        static int count = 0;
+        while(1) {
+            kprintf("main %d\n", count++);
+            hlt();
+        }
+    } else {
+        while(1) {
+            kprintf("Hi, I'm a child with pid: %d\n", pid);
+            hlt();
+        }
+    }
 
     return 0;
 }
