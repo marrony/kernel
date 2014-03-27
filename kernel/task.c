@@ -33,30 +33,6 @@ __asm__ (
 
 uint32_t load_eip();
 
-__asm__ (
-".globl switch_context     \n"
-"switch_context:           \n"
-"    movl 4(%esp), %eax    \n"  //old
-"    movl 8(%esp), %edx    \n"  //new
-"                          \n"
-"    pushl %ebp            \n"
-//"    pushl %ebx            \n"
-//"    pushl %esi            \n"
-//"    pushl %edi            \n"
-"                          \n"
-"    # Switch stacks       \n"
-"    movl %esp, (%eax)     \n"
-"    movl %edx, %esp       \n"
-"                          \n"
-//"    popl %edi             \n"
-//"    popl %esi             \n"
-//"    popl %ebx             \n"
-"    popl %ebp             \n"
-"    ret                   \n"
-);
-
-void switch_context(context_t** old, context_t* new);
-
 /*
   +=========+
   |  ss     |\   <- pushed only if a privelege level change occurs
@@ -124,11 +100,12 @@ void system_fork(registers_t* regs) {
     esp -= sizeof(registers_t);
     new_task->trap = (registers_t*)esp;
 
-    esp -= sizeof(uint32_t);
-    *(uint32_t*)esp = (uint32_t) irq_end;
+    esp -= sizeof(context_t);
+    new_task->context = (context_t*)esp;
+    memset(new_task->context, 0, sizeof(context_t));
+    new_task->context->eip = (uint32_t) irq_end;
 
     memcpy(new_task->trap, regs, sizeof(registers_t));
-    //new_task->trap->eip = (uint32_t)fork_exit;
     new_task->trap->eax = 0;
 
     regs->eax = new_task->pid;
@@ -141,29 +118,51 @@ void system_call(registers_t* regs) {
     system_fork(regs); //only system call
 }
 
-void schedule(registers_t* regs) {
-    if(!current_task)
-        return;
+__asm__ (
+".globl switch_context     \n"
+"switch_context:           \n"
+"    movl 4(%esp), %eax    \n"  //old
+"    movl 8(%esp), %edx    \n"  //new
+"                          \n"
+"    pushl %ebp            \n"
+"    pushl %eax            \n"
+"    pushl %ebx            \n"
+"    pushl %ecx            \n"
+"    pushl %edx            \n"
+"    pushl %esi            \n"
+"    pushl %edi            \n"
+"                          \n"
+"    # Switch stacks       \n"
+"    movl %esp, (%eax)     \n"
+"    movl %edx, %esp       \n"
+"                          \n"
+"    popl %edi             \n"
+"    popl %esi             \n"
+"    popl %edx             \n"
+"    popl %ecx             \n"
+"    popl %ebx             \n"
+"    popl %eax             \n"
+"    popl %ebp             \n"
+"    ret                   \n"
+);
 
-    current_task->trap = regs;
+void switch_context(context_t** old, context_t* new);
+
+void schedule() {
+    task_t* old_task = (task_t*)current_task;
 
     current_task = current_task->next;
-    if(!current_task)
+
+    if(!current_task) 
         current_task = ready_queue_start;
 
-    uint32_t esp = (uint32_t)current_task->trap;
-
-    __asm__ __volatile__ (
-        "movl %0, %%esp    \n"
-        "pushl %1          \n"
-        "ret               \n"
-        : : "r"(esp), "r"(irq_end)
-    );
+    switch_context(&old_task->context, current_task->context);
 }
 
 void timer_callback(registers_t* regs) {
     ticks++;
-    schedule(regs);
+    current_task->trap = regs;
+    schedule();
 }
 
 void init_timer(uint32_t frequency) {
@@ -177,8 +176,6 @@ void init_timer(uint32_t frequency) {
 }
 
 void init_tasking() {
-    cli();
-
     current_task = (task_t*)kmalloc(sizeof(task_t));
     current_task->pid = next_pid++;
     current_task->page_directory = current_directory;
@@ -187,10 +184,12 @@ void init_tasking() {
     ready_queue_start = current_task;
     ready_queue_end = current_task;
 
-    sti();
-
     register_interrupt_handler(0x80, &system_call);
 
     init_timer(19);
+}
+
+int getpid() {
+    return current_task->pid;
 }
 

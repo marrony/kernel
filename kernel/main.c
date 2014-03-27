@@ -37,13 +37,18 @@ int fork() {
     return ret;
 }
 
+extern int getpid();
+
 int kmain() {
     init_pic8259();
     init_paging(32*1024*1024);
+
+    cli();
     init_tasking();
+    sti();
 
     int pid;
-    if(!(pid = fork())) {
+    if((pid = fork()) != 0) {
         kprintf("THIS IS MY AWESOME KERNEL\n");
         kprintf("AUTHOR: MARRONY N. NERIS\n");
         kprintf("VERSION: 1.0\n\n");
@@ -54,7 +59,7 @@ int kmain() {
         }
     } else {
         while(1) {
-            kprintf("Hi, I'm a child with pid: %d\n", pid);
+            kprintf("Hi, I'm a child with pid: %d\n", getpid());
             hlt();
         }
     }
