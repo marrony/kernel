@@ -3,7 +3,5 @@
 
 void init_tasking();
 
-int fork();
-
 #endif //TASK_H
 
