@@ -1,7 +1,6 @@
 #include "task.h"
-
 #include "asm.h"
-#include "irq.h"
+#include "interrupt.h"
 #include "paging.h"
 #include "heap.h"
 
@@ -9,7 +8,7 @@
 
 typedef struct task_t {
     int pid;
-    registers_t* trap; 
+    interrupt_frame_t* trap; 
     context_t* context;
     void* stack;
     page_directory_t* page_directory;
@@ -23,15 +22,6 @@ volatile task_t* current_task = 0;
 int next_pid = 0;
 uint32_t ticks = 0;
 context_t kernel_context;
-
-__asm__ (
-".globl load_eip \n"
-"load_eip:       \n"
-"    popl %eax   \n"
-"    jmp %eax    \n"
-);
-
-uint32_t load_eip();
 
 /*
   +=========+
@@ -78,13 +68,15 @@ uint32_t load_eip();
 
 */
 
-extern void irq_end();
 #include "kprintf.h"
+
 void fork_exit() {
     kprintf("fork_exit");
 }
 
-void system_fork(registers_t* regs) {
+extern void irq_end();
+
+void system_fork(interrupt_frame_t* trap) {
     page_directory_t* page_directory = current_directory;
     
     task_t* new_task = (task_t*)kmalloc(sizeof(task_t));
@@ -97,25 +89,21 @@ void system_fork(registers_t* regs) {
 
     uint32_t esp = (uint32_t)new_task->stack + 4096;
 
-    esp -= sizeof(registers_t);
-    new_task->trap = (registers_t*)esp;
+    esp -= sizeof(interrupt_frame_t);
+    new_task->trap = (interrupt_frame_t*)esp;
 
     esp -= sizeof(context_t);
     new_task->context = (context_t*)esp;
     memset(new_task->context, 0, sizeof(context_t));
     new_task->context->eip = (uint32_t) irq_end;
 
-    memcpy(new_task->trap, regs, sizeof(registers_t));
+    memcpy(new_task->trap, trap, sizeof(interrupt_frame_t));
     new_task->trap->eax = 0;
 
-    regs->eax = new_task->pid;
+    trap->eax = new_task->pid;
 
     ready_queue_end->next = new_task;
     ready_queue_end = new_task;
-}
-
-void system_call(registers_t* regs) {
-    system_fork(regs); //only system call
 }
 
 __asm__ (
@@ -159,9 +147,9 @@ void schedule() {
     switch_context(&old_task->context, current_task->context);
 }
 
-void timer_callback(registers_t* regs) {
+void timer_callback(interrupt_frame_t* trap) {
     ticks++;
-    current_task->trap = regs;
+    current_task->trap = trap;
     schedule();
 }
 
@@ -183,8 +171,6 @@ void init_tasking() {
 
     ready_queue_start = current_task;
     ready_queue_end = current_task;
-
-    register_interrupt_handler(0x80, &system_call);
 
     init_timer(19);
 }

@@ -1,5 +1,5 @@
-#ifndef REGS_H 
-#define REGS_H
+#ifndef CONTEXT_H 
+#define CONTEXT_H
 
 #include <stdint.h> 
 
@@ -14,7 +14,7 @@ typedef struct context_t {
     uint32_t eip;
 } __attribute__((packed)) context_t;
 
-typedef struct registers_t {
+typedef struct interrupt_frame_t {
     uint32_t ds;
     //pusha/popa
     uint32_t edi;
@@ -34,7 +34,7 @@ typedef struct registers_t {
     //only valid when a privilege change occurs
     uint32_t user_esp;
     uint32_t ss;
-} __attribute__((packed)) registers_t;
+} __attribute__((packed)) interrupt_frame_t;
 
-#endif //REGS_H
+#endif //CONTEXT_H
 

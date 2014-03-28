@@ -1,10 +1,10 @@
 #include "paging.h"
+#include "interrupt.h"
+#include "heap.h"
+#include "asm.h"
 
 #include <stdint.h>
 #include <string.h>
-#include "irq.h"
-#include "heap.h"
-#include "asm.h"
 
 #define PRESENT      (1 << 0)
 #define READ         (1 << 1)
@@ -164,32 +164,32 @@ uint32_t mm_get_mapping(page_directory_t* directory, uint32_t address) {
 
 #include "kprintf.h"
 
-void mm_page_fault_handler(registers_t* regs) {
+void mm_page_fault_handler(interrupt_frame_t* frame) {
     uint32_t address;
 
     __asm__ __volatile__ ("movl %%cr2, %0" : "=r"(address));
 
     kprintf("A page fault was caught at address 0x%x\n", address);
 
-    if(IS_PROTECTION(regs->error_code))
+    if(IS_PROTECTION(frame->error_code))
         kprintf("The fault was caused by a page-level protection violation\n");
     else
         kprintf("The fault was caused by a non-present page\n");
 
-    if(IS_WRITE(regs->error_code))
+    if(IS_WRITE(frame->error_code))
         kprintf("The access causing the fault was a write\n");
     else
         kprintf("The access causing the fault was a read\n");
 
-    if(IS_USER(regs->error_code))
+    if(IS_USER(frame->error_code))
         kprintf("A user-mode access caused the fault\n");
     else
         kprintf("A kernel-mode access caused the fault\n");
 
-    if(IS_RESERVED(regs->error_code))
+    if(IS_RESERVED(frame->error_code))
         kprintf("The fault was caused by a reserved bit set to 1 in some paging-structure entry\n");
 
-    if(IS_INSTRUCTION(regs->error_code))
+    if(IS_INSTRUCTION(frame->error_code))
         kprintf("The fault was caused by an instruction fetch\n");
 
     while(1)
