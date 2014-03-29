@@ -9,5 +9,7 @@ typedef void (*interrupt_handler_t)(interrupt_frame_t* frame);
 
 void register_interrupt_handler(int interrupt, interrupt_handler_t callback);
 
+void init_interrupt_controller();
+
 #endif //INTERRUPT_H
 

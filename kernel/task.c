@@ -1,4 +1,5 @@
 #include "task.h"
+#include "timer.h"
 #include "asm.h"
 #include "interrupt.h"
 #include "paging.h"
@@ -19,9 +20,48 @@ volatile task_t* ready_queue_start = 0;
 volatile task_t* ready_queue_end = 0;
 volatile task_t* current_task = 0;
 
-int next_pid = 0;
+volatile int next_pid = 0;
 uint32_t ticks = 0;
 context_t kernel_context;
+
+extern void irq_end();
+
+void fork_exit() {
+}
+
+void system_fork(interrupt_frame_t* trap) {
+    page_directory_t* page_directory = current_directory;
+    
+    task_t* new_task = (task_t*)kmalloc(sizeof(task_t));
+    memset(new_task, 0, sizeof(task_t));
+
+    new_task->pid = next_pid++;
+    new_task->page_directory = page_directory;
+    new_task->stack = kmalloc(4096);
+    memset(new_task->stack, 0, 4096);
+
+    uint32_t esp = (uint32_t)new_task->stack + 4096;
+
+    esp -= sizeof(interrupt_frame_t);
+    new_task->trap = (interrupt_frame_t*)esp;
+
+    esp -= sizeof(context_t);
+    new_task->context = (context_t*)esp;
+    memset(new_task->context, 0, sizeof(context_t));
+    new_task->context->eip = (uint32_t) irq_end;
+
+    memcpy(new_task->trap, trap, sizeof(interrupt_frame_t));
+
+    new_task->trap->eax = 0;
+    trap->eax = new_task->pid;
+
+    ready_queue_end->next = new_task;
+    ready_queue_end = new_task;
+}
+
+void system_getpid(interrupt_frame_t* trap) {
+    trap->eax = current_task->pid;
+}
 
 /*
   +=========+
@@ -68,44 +108,6 @@ context_t kernel_context;
 
 */
 
-#include "kprintf.h"
-
-void fork_exit() {
-    kprintf("fork_exit");
-}
-
-extern void irq_end();
-
-void system_fork(interrupt_frame_t* trap) {
-    page_directory_t* page_directory = current_directory;
-    
-    task_t* new_task = (task_t*)kmalloc(sizeof(task_t));
-    memset(new_task, 0, sizeof(task_t));
-
-    new_task->pid = next_pid++;
-    new_task->page_directory = page_directory;
-    new_task->stack = kmalloc(4096);
-    memset(new_task->stack, 0, 4096);
-
-    uint32_t esp = (uint32_t)new_task->stack + 4096;
-
-    esp -= sizeof(interrupt_frame_t);
-    new_task->trap = (interrupt_frame_t*)esp;
-
-    esp -= sizeof(context_t);
-    new_task->context = (context_t*)esp;
-    memset(new_task->context, 0, sizeof(context_t));
-    new_task->context->eip = (uint32_t) irq_end;
-
-    memcpy(new_task->trap, trap, sizeof(interrupt_frame_t));
-    new_task->trap->eax = 0;
-
-    trap->eax = new_task->pid;
-
-    ready_queue_end->next = new_task;
-    ready_queue_end = new_task;
-}
-
 __asm__ (
 ".globl switch_context     \n"
 "switch_context:           \n"
@@ -141,44 +143,17 @@ void schedule() {
 
     current_task = current_task->next;
 
-    if(!current_task) 
+    if(!current_task)
         current_task = ready_queue_start;
 
-    switch_context(&old_task->context, current_task->context);
+    if(current_task != old_task)
+        switch_context(&old_task->context, current_task->context);
 }
 
 void timer_callback(interrupt_frame_t* trap) {
     ticks++;
     current_task->trap = trap;
     schedule();
-}
-
-#define PIT_COUNTER_DIVISOR 0x40
-#define PIT_REFRESH_COUNTER 0x41
-#define PIT_SPEAKER         0x42
-#define PIT_MODE            0x43
-#define PIT_BINARY          (0 << 0)
-#define PIT_BCD             (1 << 0)
-#define PIT_ONE_SHOT        (1 << 1)
-#define PIT_RATE_GENERATOR  (2 << 1)
-#define PIT_SQUARE_WAVE     (3 << 1)
-#define PIT_SOFT_STROBE     (4 << 1)
-#define PIT_HARD_STROBE     (5 << 1)
-#define PIT_FIRST_BYTE      (1 << 4)
-#define PIT_SECOND_BYTE     (2 << 4)
-#define PIT_TWO_BYTE        (PIT_FIRST_BYTE | PIT_SECOND_BYTE)
-#define PIT_COUNTER0        (0 << 6)
-#define PIT_COUNTER1        (1 << 6)
-#define PIT_COUNTER2        (2 << 6)
-
-void init_timer(uint32_t frequency) {
-    register_interrupt_handler(IRQ0, &timer_callback);
-
-    uint32_t divisor = 1193182 / frequency;
-
-    outb(PIT_MODE, PIT_TWO_BYTE | PIT_SQUARE_WAVE | PIT_BINARY);
-    outb(PIT_COUNTER_DIVISOR, divisor & 0xff);
-    outb(PIT_COUNTER_DIVISOR, (divisor >> 8) & 0xff);
 }
 
 void init_tasking() {
@@ -190,10 +165,8 @@ void init_tasking() {
     ready_queue_start = current_task;
     ready_queue_end = current_task;
 
-    init_timer(19);
-}
+    register_interrupt_handler(IRQ0, &timer_callback);
 
-int getpid() {
-    return current_task->pid;
+    init_timer(19);
 }
 

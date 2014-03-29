@@ -1,27 +1,30 @@
-#include <stdint.h>
 #include "asm.h"
+#include "syscall.h"
 #include "interrupt.h"
+#include "paging.h"
 #include "context.h"
 #include "task.h"
 #include "kprintf.h"
 
-void init_pic8259();
-void init_paging(uint32_t max_memory);
-void init_system_call();
-int getpid();
-
 int fork() {
     int ret;
     __asm__ __volatile__ (
-    "   int $0x80  \n"
-    : "=a"(ret)
+        "int $0x80" : "=a"(ret) : "a"(SYSTEM_fork)
+    );
+    return ret;
+}
+
+int getpid() {
+    int ret;
+    __asm__ __volatile__ (
+        "int $0x80" : "=a"(ret) : "a"(SYSTEM_getpid)
     );
     return ret;
 }
 
 int kmain() {
     cli();
-    init_pic8259();
+    init_interrupt_controller();
     init_paging(32*1024*1024);
     init_tasking();
     init_system_call();

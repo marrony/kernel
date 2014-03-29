@@ -29,7 +29,8 @@
 
 static interrupt_handler_t interrupt_table[256];
 
-void init_pic8259() {
+// initialize Programmable Interrupt Controller (i8259)
+void init_interrupt_controller() {
     memset(interrupt_table, 0, sizeof(interrupt_table));
 
     uint8_t mask0 = inb(MASTER_PIC_DATA);
@@ -67,14 +68,6 @@ void irq_handler(interrupt_frame_t* frame) {
     
     end_of_interrupt(intrno);
 
-    interrupt_handler_t handler = interrupt_table[intrno];
-    if(handler != 0)
-        handler(frame);
-}
-
-void isr_handler(interrupt_frame_t* frame) {
-    int intrno = frame->interrupt_number;
-    
     interrupt_handler_t handler = interrupt_table[intrno];
     if(handler != 0)
         handler(frame);

@@ -20,12 +20,13 @@ BOOT_OBJS = bin/boot.o
 
 KERNEL_OBJS = \
 	bin/start.o \
+	bin/trap.o \
+	bin/timer.o \
 	bin/interrupt.o \
-	bin/pic8259.o \
 	bin/paging.o \
 	bin/heap.o \
 	bin/task.o \
-	bin/system.o \
+	bin/syscall.o \
 	bin/main.o \
 	bin/kprintf.o \
 	bin/descriptor.o \
