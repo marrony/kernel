@@ -1,4 +1,7 @@
 #include "interrupt.h"
+#include "context.h"
+#include "paging.h"
+#include "task.h"
 #include "asm.h"
 #include <string.h>
 
@@ -63,7 +66,9 @@ static void end_of_interrupt(int intrno) {
     outb(MASTER_PIC_COMMAND, OCW2_EOI);
 }
 
-void irq_handler(interrupt_frame_t* frame) {
+void handle_interrupt(interrupt_frame_t* frame) {
+    current_task->trap = frame;
+
     int intrno = frame->interrupt_number;
     
     end_of_interrupt(intrno);

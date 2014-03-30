@@ -1,19 +1,20 @@
 #include "syscall.h"
-#include "context.h"
+#include "task.h"
 #include "interrupt.h"
+#include "context.h"
 
-void system_fork(interrupt_frame_t*);
-void system_getpid(interrupt_frame_t*);
+void system_fork();
+void system_getpid();
 
-static void (*system_calls[])(interrupt_frame_t*) = {
+static void (*system_calls[])() = {
     [SYSTEM_fork]   system_fork,
     [SYSTEM_getpid] system_getpid,
 };
 
-void system_call(interrupt_frame_t* trap) {
-    int syscall_number = trap->eax;
+void system_call() {
+    int syscall_number = current_task->trap->eax;
 
-    system_calls[syscall_number](trap);
+    system_calls[syscall_number]();
 }
 
 void init_system_call() {

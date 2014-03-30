@@ -1,6 +1,8 @@
 #include "paging.h"
 #include "interrupt.h"
+#include "context.h"
 #include "heap.h"
+#include "task.h"
 #include "asm.h"
 
 #include <stdint.h>
@@ -35,6 +37,9 @@ extern char __bss_start;
 extern char __bss_end;
 extern char __stack;
 
+struct pde_t* kernel_directory;
+struct pde_t* current_directory;
+
 void mm_alloc_page(uint32_t* page_table_entry) {
     if(ADDRESS(*page_table_entry) != 0)
         return;
@@ -49,20 +54,20 @@ void mm_free_page(uint32_t* page_table_entry) {
     *page_table_entry = 0;
 }
 
-uint32_t* mm_get_page_entry(page_directory_t* directory, uint32_t address, int create_page) {
+uint32_t* mm_get_page_entry(struct pde_t* directory, uint32_t address, int create_page) {
     uint32_t table_index = address >> 22;
     uint32_t page_index = (address >> 12) & 0x3ff;
 
     if(ADDRESS(directory->tables[table_index]) != 0) {
-        page_table_t* page_table = (page_table_t*)ADDRESS(directory->tables[table_index]);
+        struct pte_t* page_table = (struct pte_t*)ADDRESS(directory->tables[table_index]);
 
         return &page_table->pages[page_index];
     }
 
     if(create_page) {
-        page_table_t* page_table = (page_table_t*)kamalloc(sizeof(page_table_t), 4096);
+        struct pte_t* page_table = (struct pte_t*)kamalloc(sizeof(struct pte_t), 4096);
 
-        memset(page_table, 0, sizeof(page_table_t));
+        memset(page_table, 0, sizeof(struct pte_t));
         directory->tables[table_index] = PRESENT | READ | USER | (uint32_t)page_table; 
 
         return &page_table->pages[page_index];
@@ -71,7 +76,7 @@ uint32_t* mm_get_page_entry(page_directory_t* directory, uint32_t address, int c
     return 0;
 }
 
-int mm_remap(page_directory_t* directory, uint32_t physical, uint32_t virtual) {
+int mm_remap(struct pde_t* directory, uint32_t physical, uint32_t virtual) {
     uint32_t* page_entry = mm_get_page_entry(directory, virtual, 1);
 
     if(page_entry) {
@@ -81,9 +86,6 @@ int mm_remap(page_directory_t* directory, uint32_t physical, uint32_t virtual) {
 
     return 1;
 }
-
-page_directory_t* kernel_directory;
-page_directory_t* current_directory;
 
 static void mm_enable_paging() {
     uint32_t cr0;
@@ -97,16 +99,16 @@ static void mm_disable_paging() {
     __asm__ __volatile__ ("movl %0, %%cr0" : : "r"(cr0 & 0x7fffffff));
 }
 
-void mm_switch_page_directory(page_directory_t* directory) {
+void mm_switch_page_directory(struct pde_t* directory) {
     __asm__ __volatile__ ("movl %0, %%cr3" : : "r"(directory));
     current_directory = directory;
 
     mm_enable_paging();
 }
 
-page_table_t* mm_clone_page_table(const page_table_t* page) {
-    page_table_t* new_page = (page_table_t*)kamalloc(sizeof(page_table_t), 4096);
-    memset(new_page, 0, sizeof(page_table_t)); 
+struct pte_t* mm_clone_page_table(const struct pte_t* page) {
+    struct pte_t* new_page = (struct pte_t*)kamalloc(sizeof(struct pte_t), 4096);
+    memset(new_page, 0, sizeof(struct pte_t)); 
 
     for(int i = 0; i < 1024; i++) {
         if(!ADDRESS(page->pages[i]))
@@ -125,9 +127,9 @@ page_table_t* mm_clone_page_table(const page_table_t* page) {
     return new_page;
 }
 
-page_directory_t* mm_clone_page_directory(const page_directory_t* directory) {
-    page_directory_t* new_directory = kamalloc(sizeof(page_directory_t), 4096);
-    memset(new_directory, 0, sizeof(page_directory_t));
+struct pde_t* mm_clone_page_directory(const struct pde_t* directory) {
+    struct pde_t* new_directory = kamalloc(sizeof(struct pde_t), 4096);
+    memset(new_directory, 0, sizeof(struct pde_t));
 
     for(int i = 0; i < 1024; i++) {
         if(!directory->tables[i])
@@ -136,7 +138,7 @@ page_directory_t* mm_clone_page_directory(const page_directory_t* directory) {
         if(ADDRESS(kernel_directory->tables[i]) == ADDRESS(directory->tables[i])) {
             new_directory->tables[i] = directory->tables[i];
         } else {
-            page_table_t* page_table = mm_clone_page_table((page_table_t*)ADDRESS(directory->tables[i]));
+            struct pte_t* page_table = mm_clone_page_table((struct pte_t*)ADDRESS(directory->tables[i]));
             new_directory->tables[i] = PRESENT | USER | READ | (uint32_t)page_table; 
         }
     }
@@ -144,7 +146,7 @@ page_directory_t* mm_clone_page_directory(const page_directory_t* directory) {
     return new_directory;
 }
 
-uint32_t mm_get_mapping(page_directory_t* directory, uint32_t address) {
+uint32_t mm_get_mapping(struct pde_t* directory, uint32_t address) {
     uint32_t table_index = (address >> 22) & 0x3ff;
     uint32_t page_index = (address >> 12) & 0x3ff;
     uint32_t frame_index = address & 0xfff;
@@ -153,7 +155,7 @@ uint32_t mm_get_mapping(page_directory_t* directory, uint32_t address) {
     if(ADDRESS(table_entry) == 0)
         return ~0;
 
-    page_table_t* page_table = (page_table_t*)ADDRESS(table_entry);
+    struct pte_t* page_table = (struct pte_t*)ADDRESS(table_entry);
 
     uint32_t page_entry = page_table->pages[page_index];
     if(ADDRESS(page_entry) == 0)
@@ -164,12 +166,14 @@ uint32_t mm_get_mapping(page_directory_t* directory, uint32_t address) {
 
 #include "kprintf.h"
 
-void mm_page_fault_handler(interrupt_frame_t* frame) {
+void mm_page_fault_handler() {
     uint32_t address;
 
     __asm__ __volatile__ ("movl %%cr2, %0" : "=r"(address));
 
     kprintf("A page fault was caught at address 0x%x\n", address);
+
+    interrupt_frame_t* frame = current_task->trap;
 
     if(IS_PROTECTION(frame->error_code))
         kprintf("The fault was caused by a page-level protection violation\n");
@@ -199,8 +203,8 @@ void mm_page_fault_handler(interrupt_frame_t* frame) {
 void init_paging(uint32_t max_memory) {
     init_kernel_heap(max_memory);
 
-    kernel_directory = (page_directory_t*)kamalloc(sizeof(page_directory_t), 4096);
-    memset(kernel_directory, 0, sizeof(page_directory_t));
+    kernel_directory = (struct pde_t*)kamalloc(sizeof(struct pde_t), 4096);
+    memset(kernel_directory, 0, sizeof(struct pde_t));
 
     for(uint32_t ptr = 0; ptr < max_memory; ptr += PAGE_SIZE) {
         mm_remap(kernel_directory, ptr, ptr);

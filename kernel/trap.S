@@ -1,11 +1,11 @@
-.extern irq_handler
+.extern handle_interrupt
 
 .macro TRAP intno
 trap\intno:
     cli
     pushl $0x00
     pushl $\intno
-    jmp irq_common
+    jmp trap_common
 .endm
 
 .macro TRAP_ERROR intno 
@@ -13,51 +13,49 @@ trap\intno:
     cli
     #already pushed
     pushl $\intno
-    jmp irq_common
+    jmp trap_common
 .endm
 
 /*
-  Stack content right before call interrupt_handler
-
   +=========+
-  |  ss     |   <- pushed only if a privelege level change occurs
-  +=========+
-  |  esp    |
-  +=========+
-  |  eflgs  |
-  +=========+
-  |  cs     |
+  |  ss     |\   <- pushed only if a privelege level change occurs
+  +=========+ \
+  |  esp    |  \
+  +=========+    int/iret
+  |  eflgs  |  /
+  +=========+ /
+  |  cs     |/
   +=========+
   |  eip    |
   +=========+
-  |  error  |
+  |  error  |\
+  +=========+  add esp,8
+  |  int nr |/
   +=========+
-  |  int nr |
-  +=========+
-  |  eax    |
-  +=========+
-  |  ecx    |
+  |  eax    |\
+  +=========+ \
+  |  ecx    |  \
   +=========+
   |  edx    |
   +=========+
   |  ebx    |
-  +=========+
+  +=========+     pusha/popa
   |  esp    |
   +=========+
   |  ebp    |
   +=========+
-  |  esi    |
-  +=========+
-  |  edi    |
+  |  esi    |   /
+  +=========+  /
+  |  edi    | /
   +=========+
   |  ds     |
-  +=========+   <- esp
+  +=========+  <- esp
 
 */
 
 .text
 
-irq_common:
+trap_common:
     pusha
 
     movw %ds, %ax
@@ -71,11 +69,11 @@ irq_common:
     movw %ax, %ss
 
     pushl %esp
-    call irq_handler
+    call handle_interrupt
     addl $4, %esp
 
-.globl irq_end
-irq_end:
+.globl trap_end
+trap_end:
     popl %eax
     movw %ax, %ds
     movw %ax, %es

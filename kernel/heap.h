@@ -1,19 +1,19 @@
 #ifndef HEAP_H
 #define HEAP_H
 
-typedef struct header_t header_t;
+struct header_t;
 
-typedef struct {
-    header_t* free_list;
-} heap_t;
+struct heap_t {
+    struct header_t* free_list;
+};
 
 void init_kernel_heap(uint32_t max_memory);
 
-void* heap_alloc(heap_t* heap, size_t size, size_t align);
-void heap_free(heap_t* heap, void* ptr);
+void* heap_alloc(struct heap_t* heap, size_t size, size_t align);
+void heap_free(struct heap_t* heap, void* ptr);
 
-heap_t* create_heap();
-void destroy_heap(heap_t* heap);
+struct heap_t* create_heap();
+void destroy_heap(struct heap_t* heap);
 
 void* kamalloc(size_t size, size_t align);
 void* kmalloc(size_t size);

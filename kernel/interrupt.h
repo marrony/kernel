@@ -1,9 +1,7 @@
 #ifndef INTERRUPT_H
 #define INTERRUPT_H
 
-#include "context.h"
-
-typedef void (*interrupt_handler_t)(interrupt_frame_t* frame);
+typedef void (*interrupt_handler_t)();
 
 #define IRQ0 32
 

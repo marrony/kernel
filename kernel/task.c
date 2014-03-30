@@ -1,36 +1,24 @@
 #include "task.h"
 #include "timer.h"
 #include "asm.h"
+#include "context.h"
 #include "interrupt.h"
 #include "paging.h"
 #include "heap.h"
 
 #include <string.h>
 
-typedef struct task_t {
-    int pid;
-    interrupt_frame_t* trap; 
-    context_t* context;
-    void* stack;
-    page_directory_t* page_directory;
-    struct task_t* next;
-} task_t;
+struct task_t* current_task;
+task_t* ready_queue_start = 0;
+task_t* ready_queue_end = 0;
 
-volatile task_t* ready_queue_start = 0;
-volatile task_t* ready_queue_end = 0;
-volatile task_t* current_task = 0;
-
-volatile int next_pid = 0;
+int next_pid = 0;
 uint32_t ticks = 0;
-context_t kernel_context;
 
-extern void irq_end();
+extern void trap_end();
 
-void fork_exit() {
-}
-
-void system_fork(interrupt_frame_t* trap) {
-    page_directory_t* page_directory = current_directory;
+void system_fork() {
+    struct pde_t* page_directory = current_directory;
     
     task_t* new_task = (task_t*)kmalloc(sizeof(task_t));
     memset(new_task, 0, sizeof(task_t));
@@ -48,65 +36,20 @@ void system_fork(interrupt_frame_t* trap) {
     esp -= sizeof(context_t);
     new_task->context = (context_t*)esp;
     memset(new_task->context, 0, sizeof(context_t));
-    new_task->context->eip = (uint32_t) irq_end;
+    new_task->context->eip = (uint32_t) trap_end;
 
-    memcpy(new_task->trap, trap, sizeof(interrupt_frame_t));
+    memcpy(new_task->trap, current_task->trap, sizeof(interrupt_frame_t));
 
     new_task->trap->eax = 0;
-    trap->eax = new_task->pid;
+    current_task->trap->eax = new_task->pid;
 
     ready_queue_end->next = new_task;
     ready_queue_end = new_task;
 }
 
-void system_getpid(interrupt_frame_t* trap) {
-    trap->eax = current_task->pid;
+void system_getpid() {
+    current_task->trap->eax = current_task->pid;
 }
-
-/*
-  +=========+
-  |  ss     |\   <- pushed only if a privelege level change occurs
-  +=========+ \
-  |  esp    |  \
-  +=========+    int/iret
-  |  eflgs  |  /
-  +=========+ /
-  |  cs     |/
-  +=========+
-  |  eip    |
-  +=========+
-  |  error  |\
-  +=========+  add esp,8
-  |  int nr |/
-  +=========+
-  |  eax    |\
-  +=========+ \
-  |  ecx    |  \
-  +=========+
-  |  edx    |
-  +=========+
-  |  ebx    |
-  +=========+     pusha/popa
-  |  esp    |
-  +=========+
-  |  ebp    |
-  +=========+
-  |  esi    |   /
-  +=========+  /
-  |  edi    | /
-  +=========+
-  |  ds     |
-  +=========+
-  |         |  isr_handler
-  +=========+
-  |         |  handler
-  +=========+
-  |         |  timer_callback
-  +=========+
-  |         |  schedule
-  +=========+  <- esp
-
-*/
 
 __asm__ (
 ".globl switch_context     \n"
@@ -139,7 +82,7 @@ __asm__ (
 void switch_context(context_t** old, context_t* new);
 
 void schedule() {
-    task_t* old_task = (task_t*)current_task;
+    task_t* old_task = current_task;
 
     current_task = current_task->next;
 
@@ -150,9 +93,8 @@ void schedule() {
         switch_context(&old_task->context, current_task->context);
 }
 
-void timer_callback(interrupt_frame_t* trap) {
+void timer_callback() {
     ticks++;
-    current_task->trap = trap;
     schedule();
 }
 
