@@ -13,17 +13,17 @@ struct pde_t {
 
 #define PAGE_SIZE 4096
 
-void mm_alloc_page(uint32_t* page_table_entry);
-void mm_free_page(uint32_t* page_table_entry);
+void alloc_page(uint32_t* page_table_entry);
+void free_page(uint32_t* page_table_entry);
 
-uint32_t* mm_get_page_entry(struct pde_t* directory, uint32_t address, int create_page);
-int mm_remap(struct pde_t* directory, uint32_t physical, uint32_t virtual);
+uint32_t* get_page_entry(struct pde_t* directory, uint32_t address, int create_page);
+int remap(struct pde_t* directory, uint32_t physical, uint32_t virtual);
 
-void mm_switch_page_directory(struct pde_t* directory);
-struct pte_t* mm_clone_page_table(const struct pte_t* page);
-struct pde_t* mm_clone_page_directory(const struct pde_t* directory);
+void switch_page_directory(struct pde_t* directory);
+struct pte_t* clone_page_table(const struct pte_t* page);
+struct pde_t* clone_page_directory(const struct pde_t* directory);
 
-uint32_t mm_get_mapping(struct pde_t* directory, uint32_t address);
+uint32_t get_mapping(struct pde_t* directory, uint32_t address);
 
 void init_paging(uint32_t max_memory);
 
