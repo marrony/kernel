@@ -1,7 +1,9 @@
+#include <stdint.h>
+
 #include "syscall.h"
 #include "task.h"
 #include "interrupt.h"
-#include "context.h"
+#include "global.h"
 
 void system_fork();
 void system_getpid();

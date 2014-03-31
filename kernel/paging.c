@@ -1,12 +1,15 @@
+#include <stdint.h>
+#include <string.h>
+
 #include "paging.h"
 #include "interrupt.h"
-#include "context.h"
 #include "heap.h"
 #include "task.h"
 #include "asm.h"
+#include "global.h"
+#include "kernel.h"
 
-#include <stdint.h>
-#include <string.h>
+#define PAGE_SIZE    4096
 
 #define PRESENT      (1 << 0)
 #define READ         (1 << 1)
@@ -26,16 +29,6 @@
 #define IS_USER(x)        ((x) & (1 << 2))
 #define IS_RESERVED(x)    ((x) & (1 << 3))
 #define IS_INSTRUCTION(x) ((x) & (1 << 4))
-
-extern char __kernel_start;
-extern char __kernel_end;
-extern char __text_start;
-extern char __text_end;
-extern char __data_start;
-extern char __data_end;
-extern char __bss_start;
-extern char __bss_end;
-extern char __stack;
 
 struct pde_t* kernel_directory;
 struct pde_t* current_directory;
@@ -164,8 +157,6 @@ uint32_t get_mapping(struct pde_t* directory, uint32_t address) {
     return ADDRESS(page_entry) | frame_index;
 }
 
-#include "kprintf.h"
-
 void page_fault_handler() {
     uint32_t address;
 
@@ -173,7 +164,7 @@ void page_fault_handler() {
 
     kprintf("A page fault was caught at address 0x%x\n", address);
 
-    interrupt_frame_t* frame = current_task->trap;
+    struct trap_t* frame = current_task->trap;
 
     if(IS_PROTECTION(frame->error_code))
         kprintf("The fault was caused by a page-level protection violation\n");

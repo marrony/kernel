@@ -1,9 +1,11 @@
+#include <stdint.h>
+#include <string.h>
+
 #include "interrupt.h"
-#include "context.h"
 #include "paging.h"
 #include "task.h"
+#include "global.h"
 #include "asm.h"
-#include <string.h>
 
 #define MASTER_PIC         0x20
 #define MASTER_PIC_COMMAND MASTER_PIC
@@ -66,15 +68,15 @@ static void end_of_interrupt(int intrno) {
     outb(MASTER_PIC_COMMAND, OCW2_EOI);
 }
 
-void handle_interrupt(interrupt_frame_t* frame) {
-    current_task->trap = frame;
+void handle_interrupt(struct trap_t* trap) {
+    current_task->trap = trap;
 
-    int intrno = frame->interrupt_number;
+    int intrno = trap->interrupt_number;
     
     end_of_interrupt(intrno);
 
     interrupt_handler_t handler = interrupt_table[intrno];
     if(handler != 0)
-        handler(frame);
+        handler(trap);
 }
 

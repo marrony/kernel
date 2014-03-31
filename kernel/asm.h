@@ -1,8 +1,6 @@
 #ifndef ASM_H
 #define ASM_H
 
-#include <stdint.h> 
-
 #define cli() __asm__ __volatile__("cli")
 #define sti() __asm__ __volatile__("sti")
 #define hlt() __asm__ __volatile__("hlt")

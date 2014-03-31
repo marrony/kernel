@@ -1,4 +1,5 @@
-#include "timer.h"
+#include <stdint.h>
+
 #include "asm.h"
 
 #define PIT_COUNTER_DIVISOR 0x40

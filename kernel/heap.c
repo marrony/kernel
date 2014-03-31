@@ -1,7 +1,9 @@
 #include <stdint.h>
 #include <string.h>
+
 #include "heap.h"
-#include "kprintf.h"
+#include "global.h"
+#include "kernel.h"
 
 struct header_t {
     uint32_t magic;
@@ -14,6 +16,10 @@ struct header_t {
 struct footer_t {
     uint32_t magic;
     struct header_t* header;
+};
+
+struct heap_t {
+    struct header_t* free_list;
 };
 
 static struct header_t* remove_list(struct header_t* head, struct header_t* node) {
@@ -222,17 +228,7 @@ void kfree(void* ptr) {
     heap_free(kernel_heap, ptr);
 }
 
-extern char __kernel_start;
-extern char __kernel_end;
-extern char __text_start;
-extern char __text_end;
-extern char __data_start;
-extern char __data_end;
-extern char __bss_start;
-extern char __bss_end;
-extern char __stack;
-
-static uint32_t current_memory = (uint32_t) &__kernel_end;
+static uint32_t current_memory = (uint32_t) __kernel_end;
 
 void init_kernel_heap(uint32_t max_memory) {
     kernel_heap = (struct heap_t*)current_memory;

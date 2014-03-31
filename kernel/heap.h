@@ -1,11 +1,7 @@
 #ifndef HEAP_H
 #define HEAP_H
 
-struct header_t;
-
-struct heap_t {
-    struct header_t* free_list;
-};
+struct heap_t;
 
 void init_kernel_heap(uint32_t max_memory);
 
