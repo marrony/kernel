@@ -11,12 +11,17 @@ int8_t video_tab_size = 8;
 
 #define LINEAR(x, y) ((y)*video_width + (x))
 
+#define VIDEO_INDEX 0x3d4
+#define VIDEO_DATA  0x3d5
+#define CURSOR_LOW  15
+#define CURSOR_HIGH 14
+
 void gotoxy() {
     int16_t location = LINEAR(video_x_position, video_y_position);
-    outb(0x3d4, 14);
-    outb(0x3d5, (location >> 8) & 0xff);
-    outb(0x3d4, 15);
-    outb(0x3d5, location & 0xff);
+    outb(VIDEO_INDEX, CURSOR_HIGH);
+    outb(VIDEO_DATA, (location >> 8) & 0xff);
+    outb(VIDEO_INDEX, CURSOR_LOW);
+    outb(VIDEO_DATA, location & 0xff);
 }
 
 void kputc(char ch) {
@@ -66,19 +71,6 @@ void puts(const char* str) {
         kputc(*str++);
     }
 }
-
-/*int printf(const char* fmt, ...) {
-    char buffer[1024 + 1];
-    va_list va;
-    int ret;
-
-    va_start(va, fmt);
-    ret = vsnprintf(buffer, sizeof(buffer) - 1, fmt, va);
-    va_end(va);
-
-    puts(buffer);
-    return ret;
-}*/
 
 void kprintf(const char* fmt, ...) {
     static const char hex[] = "0123456789abcdef";

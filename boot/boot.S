@@ -324,7 +324,7 @@ _clusterToSectorNumber:
     popw  %bp
     ret
 
-    bootDrive : .byte 0x0000
+    bootDrive : .byte 0x00
     msgAbort  : .asciz "F A T A L  E R R O R"
     kernel_bin: .ascii  "KERNEL  BIN"
 

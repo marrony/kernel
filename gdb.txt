@@ -1,0 +1,6 @@
+some useful gdb commands
+br *0x7c00
+display /3i $pc
+set architecture i8086
+target remote localhost:1234
+qemu-system-i386 -fda iso/stage0.img -boot a -s -S

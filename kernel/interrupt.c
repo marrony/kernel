@@ -57,7 +57,7 @@ void init_interrupt_controller() {
     outb(SLAVE_PIC_DATA, mask1);
 }
 
-void register_interrupt_handler(int intr, interrupt_handler_t callback) {
+void set_interrupt_handler(int intr, interrupt_handler_t callback) {
     interrupt_table[intr] = callback;
 }
 

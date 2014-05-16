@@ -1,6 +1,9 @@
 #ifndef KERNEL_H
 #define KERNEL_H
 
+// heap.c
+void init_kernel_heap(uint32_t max_memory);
+
 // descriptor.c
 void init_descriptor();
 

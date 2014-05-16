@@ -20,6 +20,6 @@ void system_call() {
 }
 
 void init_system_call() {
-    register_interrupt_handler(0x80, &system_call);
+    set_interrupt_handler(0x80, &system_call);
 }
 

@@ -201,7 +201,7 @@ void init_paging(uint32_t max_memory) {
         remap(kernel_directory, ptr, ptr);
     }
 
-    register_interrupt_handler(14, &page_fault_handler);
+    set_interrupt_handler(14, &page_fault_handler);
     switch_page_directory(kernel_directory);
 }
 

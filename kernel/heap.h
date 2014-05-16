@@ -3,8 +3,6 @@
 
 struct heap_t;
 
-void init_kernel_heap(uint32_t max_memory);
-
 void* heap_alloc(struct heap_t* heap, size_t size, size_t align);
 void heap_free(struct heap_t* heap, void* ptr);
 

@@ -3,7 +3,6 @@
 
 #include "task.h"
 #include "kernel.h"
-#include "asm.h"
 #include "interrupt.h"
 #include "paging.h"
 #include "heap.h"
@@ -14,7 +13,7 @@ static struct task_t* ready_queue_start = 0;
 static struct task_t* ready_queue_end = 0;
 
 static int next_pid = 0;
-static uint32_t ticks = 0;
+volatile uint32_t ticks = 0;
 
 extern void trap_end();
 
@@ -108,8 +107,8 @@ void init_tasking() {
     ready_queue_start = current_task;
     ready_queue_end = current_task;
 
-    register_interrupt_handler(IRQ0, &timer_callback);
+    set_interrupt_handler(IRQ0, &timer_callback);
 
-    init_timer(19);
+    init_timer(HZ);
 }
 

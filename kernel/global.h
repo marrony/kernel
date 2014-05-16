@@ -22,6 +22,9 @@ extern struct pde_t* current_directory;
 extern struct task_t* current_task;
 
 // trap.S
-extern uint32_t trap_vector[];
+extern const uint32_t trap_vector[];
+
+extern volatile uint32_t ticks;
+#define HZ 19
 
 #endif //GLOBAL_H
